@@ -1,21 +1,35 @@
+
 from app.database.connection import get_connection
-from app.product_data import PRODUCTS
+
+
+SEED_PRODUCTS = [
+    {"name": "Wireless Mouse", "price": 24.99},
+    {"name": "Mechanical Keyboard", "price": 79.99},
+    {"name": "USB-C Hub", "price": 39.99},
+]
 
 
 def seed_products():
     connection = get_connection()
 
-    for product in PRODUCTS:
-        connection.execute(
-            """
-            INSERT INTO products (name, price)
-            VALUES (?, ?)
-            """,
-            (product["name"], product["price"])
-        )
+    try:
+        for product in SEED_PRODUCTS:
+            connection.execute(
+                """
+                INSERT INTO products (name, price)
+                VALUES (?, ?)
+                """,
+                (product["name"], product["price"])
+            )
 
-    connection.commit()
-    connection.close()
+        connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
 
 
 if __name__ == "__main__":
