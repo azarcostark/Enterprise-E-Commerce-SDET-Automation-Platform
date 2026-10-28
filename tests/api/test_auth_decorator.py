@@ -167,3 +167,56 @@ def test_expired_bearer_token():
     assert response.status_code == 401
     body = response.json
     assert body["error"]["code"] == "INVALID_TOKEN"
+
+
+def test_token_missing_role_is_rejected():
+    client = create_test_app().test_client()
+
+    token = jwt.encode(
+        {
+            "sub": "10",
+            "username": "testuser",
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+        },
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+
+    response = client.get(
+        "/protected",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_token_missing_subject_is_rejected():
+    client = create_test_app().test_client()
+
+    token = jwt.encode(
+        {
+            "username": "testuser",
+            "role": "user",
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+        },
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+
+    response = client.get(
+        "/protected",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_bearer_header_without_token_is_rejected():
+    client = create_test_app().test_client()
+
+    response = client.get(
+        "/protected",
+        headers={"Authorization": "Bearer"},
+    )
+
+    assert response.status_code == 401

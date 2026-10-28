@@ -1,3 +1,4 @@
+
 from functools import wraps
 
 import jwt
@@ -10,30 +11,47 @@ from app.errors.handlers import error_response
 def require_auth(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get("Authorization")
+        auth_header = request.headers.get("Authorization", "")
 
-        if not auth_header:
+        parts = auth_header.split()
+
+        if not parts:
             return error_response(
                 "AUTHENTICATION_REQUIRED",
                 "Authorization header is required.",
                 401
             )
 
-        if not auth_header.startswith("Bearer "):
+        if len(parts) != 2 or parts[0].lower() != "bearer":
             return error_response(
                 "INVALID_AUTH_HEADER",
                 "Authorization header must use Bearer token.",
                 401
             )
 
-        token = auth_header.split(" ", 1)[1]
+        token = parts[1]
 
         try:
             payload = jwt.decode(
                 token,
                 JWT_SECRET,
-                algorithms=["HS256"]
+                algorithms=["HS256"],
+                options={
+                    "require": ["exp", "sub", "username", "role"]
+                }
             )
+
+            if (
+                not isinstance(payload["sub"], str)
+                or not payload["sub"]
+                or not isinstance(payload["username"], str)
+                or not payload["username"]
+                or payload["role"] not in ("user", "admin")
+            ):
+                raise jwt.InvalidTokenError(
+                    "Required token claims are invalid."
+                )
+
         except jwt.InvalidTokenError:
             return error_response(
                 "INVALID_TOKEN",
@@ -46,6 +64,7 @@ def require_auth(f):
         return f(*args, **kwargs)
 
     return decorated_function
+
 
 def require_role(required_role):
     def decorator(f):
