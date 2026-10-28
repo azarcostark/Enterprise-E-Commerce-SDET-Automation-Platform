@@ -1,3 +1,6 @@
+
+import uuid
+
 import pytest
 
 from app.database.connection import get_connection
@@ -6,59 +9,66 @@ from app.repositories.user_repository import create_user
 from app.repositories.order_repository import create_order, delete_order
 
 
-
 @pytest.fixture
 def order_test_data():
-    username = "order_test_user"
-    password = "testpassword"
+    # Unique username prevents collisions with previous test runs.
+    username = f"order_test_{uuid.uuid4().hex}"
 
-    user_id = create_user(username, password)
+    user_id = None
+    product_ids = []
+    order_ids = []
 
-    product_id_1 = create_product(
-        "Order Test Product 1",
-        99.99
-    )
+    try:
+        user_id = create_user(username, "testpassword")
 
-    product_id_2 = create_product(
-        "Order Test Product 2",
-        49.99
-    )
-
-    created_order_ids = []
-
-    yield {
-        "user_id": user_id,
-        "product_id_1": product_id_1,
-        "product_id_2" : product_id_2,
-        "created_order_ids": created_order_ids
-    }
-
-
-
-    for order_id in created_order_ids:
-        delete_order(order_id)
-
-    connection = get_connection()
-
-    try :
-        connection.execute(
-            "DELETE FROM users WHERE id = ?",
-            (user_id,)
+        product_id_1 = create_product(
+            "Order Test Product 1",
+            99.99
         )
+        product_ids.append(product_id_1)
 
-        connection.execute(
-            "DELETE FROM products WHERE id IN (?, ?)",
-            (product_id_1, product_id_2)
+        product_id_2 = create_product(
+            "Order Test Product 2",
+            49.99
         )
+        product_ids.append(product_id_2)
 
-        connection.commit()
-
-    except Exception:
-        connection.rollback()
-        raise
+        yield {
+            "user_id": user_id,
+            "product_id_1": product_id_1,
+            "product_id_2": product_id_2,
+            "created_order_ids": order_ids,
+        }
 
     finally:
-        connection.close()
+        # Delete orders and their items first.
+        for order_id in order_ids:
+            delete_order(order_id)
+
+        # Then remove the test user and products.
+        connection = get_connection()
+
+        try:
+            if user_id is not None:
+                connection.execute(
+                    "DELETE FROM users WHERE id = ?",
+                    (user_id,)
+                )
+
+            for product_id in product_ids:
+                connection.execute(
+                    "DELETE FROM products WHERE id = ?",
+                    (product_id,)
+                )
+
+            connection.commit()
+
+        except Exception:
+            connection.rollback()
+            raise
+
+        finally:
+            connection.close()
 
 
 def test_create_order(order_test_data):
@@ -68,9 +78,9 @@ def test_create_order(order_test_data):
             {
                 "product_id": order_test_data["product_id_1"],
                 "quantity": 2,
-                "unit_price": 99.99
+                "unit_price": 99.99,
             }
-        ]
+        ],
     )
 
     order_test_data["created_order_ids"].append(order_id)
@@ -80,25 +90,27 @@ def test_create_order(order_test_data):
 
     connection = get_connection()
 
-    order = connection.execute(
-        """
-        SELECT id, user_id, status
-        FROM orders
-        WHERE id = ?
-        """,
-        (order_id,)
-    ).fetchone()
+    try:
+        order = connection.execute(
+            """
+            SELECT id, user_id, status
+            FROM orders
+            WHERE id = ?
+            """,
+            (order_id,),
+        ).fetchone()
 
-    order_item = connection.execute(
-        """
-        SELECT order_id, product_id, quantity, unit_price
-        FROM order_items
-        WHERE order_id = ?
-        """,
-        (order_id,)
-    ).fetchone()
+        order_item = connection.execute(
+            """
+            SELECT order_id, product_id, quantity, unit_price
+            FROM order_items
+            WHERE order_id = ?
+            """,
+            (order_id,),
+        ).fetchone()
 
-    connection.close()
+    finally:
+        connection.close()
 
     assert order is not None
     assert order["user_id"] == order_test_data["user_id"]
@@ -115,33 +127,35 @@ def test_create_order_with_multiple_items(order_test_data):
         order_test_data["user_id"],
         [
             {
-                "product_id" : order_test_data["product_id_1"],
-                "quantity" : 2,
-                "unit_price" : 99.99
+                "product_id": order_test_data["product_id_1"],
+                "quantity": 2,
+                "unit_price": 99.99,
             },
             {
-                "product_id" : order_test_data["product_id_2"],
-                "quantity" : 3,
-                "unit_price" : 49.99
-            }
-        ]
+                "product_id": order_test_data["product_id_2"],
+                "quantity": 3,
+                "unit_price": 49.99,
+            },
+        ],
     )
 
     order_test_data["created_order_ids"].append(order_id)
 
     connection = get_connection()
 
-    order_items = connection.execute(
-        """
-        SELECT order_id, product_id, quantity, unit_price
-        FROM order_items
-        WHERE order_id = ?
-        ORDER BY id
-        """,
-        (order_id,)
-    ).fetchall()
+    try:
+        order_items = connection.execute(
+            """
+            SELECT order_id, product_id, quantity, unit_price
+            FROM order_items
+            WHERE order_id = ?
+            ORDER BY id
+            """,
+            (order_id,),
+        ).fetchall()
 
-    connection.close()
+    finally:
+        connection.close()
 
     assert len(order_items) == 2
 
@@ -155,36 +169,38 @@ def test_create_order_with_multiple_items(order_test_data):
     assert order_items[1]["quantity"] == 3
     assert order_items[1]["unit_price"] == 49.99
 
+
 def test_delete_order(order_test_data):
     order_id = create_order(
         order_test_data["user_id"],
         [
             {
-                "product_id" : order_test_data["product_id_1"],
-                "quantity" : 2,
-                "unit_price" : 99.99
+                "product_id": order_test_data["product_id_1"],
+                "quantity": 2,
+                "unit_price": 99.99,
             }
-        ]
+        ],
     )
 
-    connection = get_connection()
+    order_test_data["created_order_ids"].append(order_id)
+
     delete_order(order_id)
 
-    result = connection.execute(
-        """
-        SELECT * FROM orders WHERE id = ?
-        """,
-        (order_id, )
-    ).fetchone()
+    connection = get_connection()
 
-    assert result is None
+    try:
+        order = connection.execute(
+            "SELECT * FROM orders WHERE id = ?",
+            (order_id,),
+        ).fetchone()
 
-    result = connection.execute(
-        """
-        SELECT * FROM order_items WHERE order_id = ?
-        """, (order_id,)
-    ).fetchone()
+        order_item = connection.execute(
+            "SELECT * FROM order_items WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
 
-    assert result is None
+    finally:
+        connection.close()
 
-    connection.close()
+    assert order is None
+    assert order_item is None
