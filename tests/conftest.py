@@ -2,6 +2,9 @@
 import uuid
 
 import pytest
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from framework.clients.api_client import APIClient
 from app.repositories.user_repository import create_user, delete_user

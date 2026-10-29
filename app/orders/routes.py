@@ -1,4 +1,6 @@
+
 from flask import request, jsonify, Blueprint
+
 from app.services import order_service
 from app.auth.decorators import require_auth
 from app.errors.handlers import error_response
@@ -6,11 +8,18 @@ from app.errors.handlers import error_response
 
 orders_bp = Blueprint("orders", __name__)
 
+
 @orders_bp.route("/api/orders", methods=["POST"])
 @require_auth
 def create_order():
+    data = request.get_json(silent=True)
 
-    data = request.json
+    if not isinstance(data, dict):
+        return error_response(
+            "VALIDATION_FAILED",
+            "A valid JSON object is required.",
+            400,
+        )
 
     items = data.get("items")
 
@@ -18,25 +27,18 @@ def create_order():
         return error_response(
             "VALIDATION_FAILED",
             "The 'items' field is required.",
-            400
+            400,
         )
 
-    user_id = int(request.user["sub"])
-
     try:
-
+        user_id = int(request.user["sub"])
         order_id = order_service.create_order(user_id, items)
 
-        return jsonify(
-            {
-                "id" : order_id
-            }
-        ), 201
+        return jsonify({"id": order_id}), 201
 
     except ValueError as error:
-
         return error_response(
             "VALIDATION_FAILED",
             str(error),
-            400
+            400,
         )
